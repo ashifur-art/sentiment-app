@@ -1,16 +1,17 @@
 import io
+import os
 import re
+import joblib
 import numpy as np
 import pandas as pd
 from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
-from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 app = FastAPI(title="Aspect-Based Sentiment Analysis AI Engine")
 
-# CORS Middleware (Frontend API call issue fix)
+# CORS Middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -22,22 +23,55 @@ app.add_middleware(
 # Template Setup
 templates = Jinja2Templates(directory="templates")
 
-# Sentiment Labels Map
+# Sentiment Map
 LABELS_MAP = {0: "Negative", 1: "Neutral", 2: "Positive"}
-LABEL_NAMES = ["Negative", "Neutral", "Positive"]
+
+# --- Load ML Model & Vectorizer Safely ---
+MODEL_PATH = "absa_model.pkl"
+VECTORIZER_PATH = "tfidf_vectorizer.pkl"
+
+model = None
+vectorizer = None
+
+if os.path.exists(MODEL_PATH) and os.path.exists(VECTORIZER_PATH):
+    try:
+        model = joblib.load(MODEL_PATH)
+        vectorizer = joblib.load(VECTORIZER_PATH)
+        print("✅ ML Model & Vectorizer loaded successfully!")
+    except Exception as e:
+        print(f"⚠️ Error loading pkl files: {e}")
 
 
-# --- Dummy AI Inference Engine (Replace with your actual ML model code) ---
-def dummy_predict_sentiment(text: str, aspect: str = ""):
-    """Mock ML prediction function returning class probabilities."""
-    text_lower = text.lower()
+def predict_sentiment_logic(text: str, aspect: str = ""):
+    """Predicts sentiment using ML model if available, else falls back to rules."""
+    text_clean = str(text).strip()
+    if not text_clean:
+        return {"sentiment": "Neutral", "confidence": 50.0}
 
-    # Rule-based fallback logic for demonstration
+    # If Model is loaded, use it
+    if model is not None and vectorizer is not None:
+        try:
+            full_text = f"{aspect} {text_clean}".strip()
+            vec_text = vectorizer.transform([full_text])
+            pred = model.predict(vec_text)[0]
+
+            # Standardize output string
+            if isinstance(pred, (int, np.integer)):
+                sentiment = LABELS_MAP.get(int(pred), "Neutral")
+            else:
+                sentiment = str(pred).capitalize()
+
+            return {"sentiment": sentiment, "confidence": 90.0}
+        except Exception as e:
+            print(f"Inference Error: {e}")
+
+    # Fallback Rule-Based Logic
+    text_lower = text_clean.lower()
     if any(
         w in text_lower
-        for w in ["good", "great", "excellent", "love", "awesome", "best"]
+        for w in ["good", "great", "excellent", "love", "awesome", "best", "fast"]
     ):
-        probs = [0.05, 0.15, 0.80]
+        return {"sentiment": "Positive", "confidence": 85.0}
     elif any(
         w in text_lower
         for w in [
@@ -51,27 +85,12 @@ def dummy_predict_sentiment(text: str, aspect: str = ""):
             "bug",
         ]
     ):
-        probs = [0.85, 0.10, 0.05]
-    else:
-        probs = [0.20, 0.60, 0.20]
-
-    pred_idx = int(np.argmax(probs))
-    sentiment = LABELS_MAP[pred_idx]
-    confidence = round(float(probs[pred_idx]) * 100, 2)
-
-    return {
-        "sentiment": sentiment,
-        "confidence": confidence,
-        "breakdown": {
-            "Positive": round(probs[2] * 100, 1),
-            "Neutral": round(probs[1] * 100, 1),
-            "Negative": round(probs[0] * 100, 1),
-        },
-    }
+        return {"sentiment": "Negative", "confidence": 85.0}
+    
+    return {"sentiment": "Neutral", "confidence": 60.0}
 
 
 # --- Routes ---
-
 
 @app.get("/", response_class=HTMLResponse)
 async def serve_home(request: Request):
@@ -84,13 +103,18 @@ async def predict_single(
     aspect: str = Form(""),
     review: str = Form(...),
 ):
-    if not review.strip():
-        return JSONResponse(
-            status_code=400, content={"error": "Review text cannot be empty"}
-        )
+    try:
+        if not review.strip():
+            return JSONResponse(
+                status_code=400, content={"error": "Review text cannot be empty"}
+            )
 
-    res = dummy_predict_sentiment(review, aspect)
-    return JSONResponse(content=res)
+        res = predict_sentiment_logic(review, aspect)
+        return JSONResponse(content=res)
+    except Exception as e:
+        return JSONResponse(
+            status_code=500, content={"error": f"Single Prediction Error: {str(e)}"}
+        )
 
 
 @app.post("/predict-file")
@@ -99,7 +123,6 @@ async def predict_file(file: UploadFile = File(...)):
         contents = await file.read()
         filename = file.filename.lower()
 
-        # Reading Dataset based on extension
         if filename.endswith(".csv"):
             df = pd.read_csv(io.BytesIO(contents))
         elif filename.endswith((".xlsx", ".xls")):
@@ -107,17 +130,15 @@ async def predict_file(file: UploadFile = File(...)):
         else:
             return JSONResponse(
                 status_code=400,
-                content={
-                    "error": "Unsupported file format. Please upload a .csv or .xlsx file."
-                },
+                content={"error": "Unsupported file format. Upload .csv or .xlsx"},
             )
 
         if df.empty:
             return JSONResponse(
-                status_code=400, content={"error": "The uploaded file is empty."}
+                status_code=400, content={"error": "Uploaded file is empty"}
             )
 
-        # Flexible Review Column Identification
+        # Detect Review Column
         review_col = None
         for col in df.columns:
             if re.search(
@@ -128,27 +149,17 @@ async def predict_file(file: UploadFile = File(...)):
                 review_col = col
                 break
 
-        # Fallback to first string/object column if no named review column found
         if review_col is None:
             string_cols = df.select_dtypes(include=["object"]).columns
-            if len(string_cols) > 0:
-                review_col = string_cols[0]
-            else:
-                review_col = df.columns[0]
+            review_col = string_cols[0] if len(string_cols) > 0 else df.columns[0]
 
         predictions = []
-
-        # Predict sentiment row by row
         for val in df[review_col]:
-            text_str = str(val) if pd.notnull(val) else ""
-            res = dummy_predict_sentiment(text_str)
-            # Storing string sentiment label directly to avoid index errors
+            res = predict_sentiment_logic(str(val))
             predictions.append(res["sentiment"])
 
-        # Safely assign predicted sentiment list to DataFrame
         df["Predicted_Sentiment"] = predictions
 
-        # Summary Metrics Calculation
         pos_count = int((df["Predicted_Sentiment"] == "Positive").sum())
         neu_count = int((df["Predicted_Sentiment"] == "Neutral").sum())
         neg_count = int((df["Predicted_Sentiment"] == "Negative").sum())
@@ -169,12 +180,5 @@ async def predict_file(file: UploadFile = File(...)):
 
     except Exception as e:
         return JSONResponse(
-            status_code=500, content={"error": f"Error processing file: {str(e)}"}
+            status_code=500, content={"error": f"File Processing Error: {str(e)}"}
         )
-
-
-if __name__ == "__main__":
-
-    import uvicorn
-
-    uvicorn.run("app:app", host="127.0.0.1", port=8000, reload=True)
