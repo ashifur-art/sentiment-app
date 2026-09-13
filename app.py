@@ -11,7 +11,7 @@ from fastapi.templating import Jinja2Templates
 
 app = FastAPI(title="Aspect-Based Sentiment Analysis AI Engine")
 
-# CORS Middleware Setup
+# CORS Setup
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -20,13 +20,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Template Setup
+# Setup Templates
 templates = Jinja2Templates(directory="templates")
 
-# Sentiment Label Map
+# Sentiment Map
 LABELS_MAP = {0: "Negative", 1: "Neutral", 2: "Positive"}
 
-# --- Load ML Model & Vectorizer Safely ---
+# Model Paths
 MODEL_PATH = "absa_model.pkl"
 VECTORIZER_PATH = "tfidf_vectorizer.pkl"
 
@@ -43,34 +43,71 @@ if os.path.exists(MODEL_PATH) and os.path.exists(VECTORIZER_PATH):
 
 
 def predict_sentiment_logic(text: str, aspect: str = ""):
-    """Predicts sentiment using ML model if loaded, else fallback rule-based."""
+    """Predicts sentiment using ML model if loaded, else fallback rule-based logic."""
     text_clean = str(text).strip()
     if not text_clean:
-        return {"sentiment": "Neutral", "confidence": 50.0}
+        return {
+            "sentiment": "Neutral",
+            "confidence": 50.0,
+            "breakdown": {"Positive": 0.0, "Neutral": 100.0, "Negative": 0.0},
+        }
 
-    # Model Prediction
+    # Model Prediction Logic
     if model is not None and vectorizer is not None:
         try:
             full_text = f"{aspect} {text_clean}".strip()
             vec_text = vectorizer.transform([full_text])
-            pred = model.predict(vec_text)[0]
 
-            if isinstance(pred, (int, np.integer)):
-                sentiment = LABELS_MAP.get(int(pred), "Neutral")
+            if hasattr(model, "predict_proba"):
+                probs = model.predict_proba(vec_text)[0]
+                pos_pct = round(float(probs[2]) * 100, 1) if len(probs) > 2 else 0.0
+                neu_pct = round(float(probs[1]) * 100, 1) if len(probs) > 1 else 0.0
+                neg_pct = round(float(probs[0]) * 100, 1)
+
+                pred_idx = int(np.argmax(probs))
+                sentiment = LABELS_MAP.get(pred_idx, "Neutral")
+                confidence = round(float(probs[pred_idx]) * 100, 1)
             else:
-                sentiment = str(pred).capitalize()
+                pred = model.predict(vec_text)[0]
+                sentiment = (
+                    LABELS_MAP.get(int(pred), "Neutral")
+                    if isinstance(pred, (int, np.integer))
+                    else str(pred).capitalize()
+                )
+                confidence = 90.0
+                pos_pct, neu_pct, neg_pct = (
+                    (100.0, 0.0, 0.0)
+                    if sentiment == "Positive"
+                    else (
+                        (0.0, 100.0, 0.0)
+                        if sentiment == "Neutral"
+                        else (0.0, 0.0, 100.0)
+                    )
+                )
 
-            return {"sentiment": sentiment, "confidence": 90.0}
+            return {
+                "sentiment": sentiment,
+                "confidence": confidence,
+                "breakdown": {
+                    "Positive": pos_pct,
+                    "Neutral": neu_pct,
+                    "Negative": neg_pct,
+                },
+            }
         except Exception as e:
             print(f"Inference Error: {e}")
 
-    # Fallback Rule-Based Logic
+    # Fallback Rule-Based Logic with Breakdown
     text_lower = text_clean.lower()
     if any(
         w in text_lower
         for w in ["good", "great", "excellent", "love", "awesome", "best", "fast"]
     ):
-        return {"sentiment": "Positive", "confidence": 85.0}
+        return {
+            "sentiment": "Positive",
+            "confidence": 85.0,
+            "breakdown": {"Positive": 85.0, "Neutral": 10.0, "Negative": 5.0},
+        }
     elif any(
         w in text_lower
         for w in [
@@ -84,9 +121,17 @@ def predict_sentiment_logic(text: str, aspect: str = ""):
             "bug",
         ]
     ):
-        return {"sentiment": "Negative", "confidence": 85.0}
+        return {
+            "sentiment": "Negative",
+            "confidence": 85.0,
+            "breakdown": {"Positive": 5.0, "Neutral": 10.0, "Negative": 85.0},
+        }
 
-    return {"sentiment": "Neutral", "confidence": 60.0}
+    return {
+        "sentiment": "Neutral",
+        "confidence": 60.0,
+        "breakdown": {"Positive": 20.0, "Neutral": 60.0, "Negative": 20.0},
+    }
 
 
 # --- Routes ---
@@ -94,7 +139,7 @@ def predict_sentiment_logic(text: str, aspect: str = ""):
 
 @app.get("/", response_class=HTMLResponse)
 async def serve_home(request: Request):
-    # Python 3.14 & Latest Starlette compatibility syntax
+    # Fixed for Python 3.14 & Latest Starlette compatibility
     return templates.TemplateResponse(request=request, name="index.html")
 
 
@@ -139,7 +184,7 @@ async def predict_file(file: UploadFile = File(...)):
                 status_code=400, content={"error": "Uploaded file is empty"}
             )
 
-        # Detect Review Column Dynamic Syntax
+        # Dynamic Review Column Detection
         review_col = None
         for col in df.columns:
             if re.search(
