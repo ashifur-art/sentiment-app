@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ABSA Sentiment Intelligence</title>
+    <!-- Chart.js Library included for Graphs -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         :root {
             --bg-color: #0f172a;
@@ -28,7 +30,7 @@
 
         * { box-sizing: border-box; transition: background-color 0.3s, color 0.3s; }
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: var(--bg-color); color: var(--text-color); margin: 0; padding: 20px; }
-        .container { max-width: 900px; margin: 0 auto; }
+        .container { max-width: 950px; margin: 0 auto; }
         .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--border-color); padding-bottom: 15px; margin-bottom: 25px; }
         .theme-toggle { cursor: pointer; padding: 8px 16px; background: var(--card-bg); border: 1px solid var(--border-color); color: var(--text-color); border-radius: 8px; font-weight: bold; }
         .card { background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 12px; padding: 25px; margin-bottom: 25px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
@@ -47,6 +49,9 @@
         .breakdown-box.neu { border-top: 4px solid var(--neutral-color); }
         .breakdown-box.neg { border-top: 4px solid var(--negative-color); }
         
+        /* Graph Container */
+        .chart-container { position: relative; max-width: 320px; margin: 20px auto; }
+
         .styled-table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 14px; }
         .styled-table th, .styled-table td { border: 1px solid var(--border-color); padding: 10px; text-align: left; }
         .styled-table th { background: var(--bg-color); }
@@ -126,11 +131,15 @@
             </div>
             <button type="submit" class="btn">Process Dataset</button>
         </form>
+        
+        <!-- File Result & Graph Container -->
         <div id="fileResult" style="margin-top: 15px;"></div>
     </div>
 </div>
 
 <script>
+    let bulkChart = null;
+
     // Theme Toggle
     function toggleTheme() {
         const currentTheme = document.documentElement.getAttribute('data-theme');
@@ -154,12 +163,9 @@
             }
 
             window.speechSynthesis.speak(utterance);
-        } else {
-            alert("Speech synthesis is not supported in your browser.");
         }
     }
 
-    // Load voices on setup
     if ('speechSynthesis' in window) {
         window.speechSynthesis.onvoiceschanged = () => { window.speechSynthesis.getVoices(); };
     }
@@ -194,7 +200,7 @@
         recognition.start();
     }
 
-    // --- Single Review Submit Logic ---
+    // --- Single Review Submit ---
     document.getElementById('predictionForm').addEventListener('submit', function(e) {
         e.preventDefault();
         const formData = new FormData(this);
@@ -220,7 +226,6 @@
                 document.getElementById('negPercent').innerText = data.breakdown.Negative + '%';
             }
 
-            // Auto Voice Reply
             if (document.getElementById('autoVoiceToggle').checked) {
                 const speechMsg = `The predicted sentiment is ${data.sentiment} with a confidence of ${data.confidence} percent.`;
                 speakText(speechMsg);
@@ -238,7 +243,7 @@
         }
     });
 
-    // --- File Processing Submit Logic ---
+    // --- Bulk Dataset Upload & Render Graph ---
     document.getElementById('fileForm').addEventListener('submit', function(e) {
         e.preventDefault();
         const formData = new FormData();
@@ -246,7 +251,7 @@
         formData.append('file', fileInput.files[0]);
 
         const resultDiv = document.getElementById('fileResult');
-        resultDiv.innerHTML = "<p>Processing file... Please wait.</p>";
+        resultDiv.innerHTML = "<p>Processing dataset and generating sentiment graph... Please wait.</p>";
 
         fetch('/predict-file', {
             method: 'POST',
@@ -259,11 +264,48 @@
                 return;
             }
 
+            // Render Table + Canvas for Graph
             resultDiv.innerHTML = `
                 <h4>Processed ${data.total_rows} Rows</h4>
-                <p>Summary: Positive (${data.summary.Positive}), Neutral (${data.summary.Neutral}), Negative (${data.summary.Negative})</p>
-                <div>${data.table_html}</div>
+                <p><strong>Summary:</strong> Positive (${data.summary.Positive}), Neutral (${data.summary.Neutral}), Negative (${data.summary.Negative})</p>
+                
+                <!-- Chart Canvas -->
+                <div class="chart-container">
+                    <canvas id="sentimentChart"></canvas>
+                </div>
+
+                <h4 style="margin-top:20px;">Preview Top 10 Rows</h4>
+                <div style="overflow-x:auto;">${data.table_html}</div>
             `;
+
+            // Draw Chart.js Graph
+            const ctx = document.getElementById('sentimentChart').getContext('2d');
+            
+            if (bulkChart) {
+                bulkChart.destroy(); // Clear existing chart
+            }
+
+            bulkChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Positive', 'Neutral', 'Negative'],
+                    datasets: [{
+                        data: [data.summary.Positive, data.summary.Neutral, data.summary.Negative],
+                        backgroundColor: ['#22c55e', '#eab308', '#ef4444'],
+                        borderWidth: 2,
+                        borderColor: '#1e293b'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: { color: '#f8fafc', font: { size: 14 } }
+                        }
+                    }
+                }
+            });
         })
         .catch(err => {
             resultDiv.innerHTML = "<p style='color:var(--negative-color)'>File processing error occurred.</p>";
