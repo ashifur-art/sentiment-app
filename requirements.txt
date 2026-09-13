@@ -1,8 +1,8 @@
 fastapi
 uvicorn
-jinja2
-scikit-learn
 pandas
-joblib
-pydantic
+numpy
+jinja2
+python-multipart
 openpyxl
+scikit-learn
