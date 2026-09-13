@@ -11,7 +11,7 @@ from fastapi.templating import Jinja2Templates
 
 app = FastAPI(title="Aspect-Based Sentiment Analysis AI Engine")
 
-# CORS Middleware
+# CORS Middleware Setup
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -23,7 +23,7 @@ app.add_middleware(
 # Template Setup
 templates = Jinja2Templates(directory="templates")
 
-# Sentiment Map
+# Sentiment Label Map
 LABELS_MAP = {0: "Negative", 1: "Neutral", 2: "Positive"}
 
 # --- Load ML Model & Vectorizer Safely ---
@@ -39,23 +39,22 @@ if os.path.exists(MODEL_PATH) and os.path.exists(VECTORIZER_PATH):
         vectorizer = joblib.load(VECTORIZER_PATH)
         print("✅ ML Model & Vectorizer loaded successfully!")
     except Exception as e:
-        print(f"⚠️ Error loading pkl files: {e}")
+        print(f"⚠️ Warning loading pkl files: {e}")
 
 
 def predict_sentiment_logic(text: str, aspect: str = ""):
-    """Predicts sentiment using ML model if available, else falls back to rules."""
+    """Predicts sentiment using ML model if loaded, else fallback rule-based."""
     text_clean = str(text).strip()
     if not text_clean:
         return {"sentiment": "Neutral", "confidence": 50.0}
 
-    # If Model is loaded, use it
+    # Model Prediction
     if model is not None and vectorizer is not None:
         try:
             full_text = f"{aspect} {text_clean}".strip()
             vec_text = vectorizer.transform([full_text])
             pred = model.predict(vec_text)[0]
 
-            # Standardize output string
             if isinstance(pred, (int, np.integer)):
                 sentiment = LABELS_MAP.get(int(pred), "Neutral")
             else:
@@ -86,15 +85,17 @@ def predict_sentiment_logic(text: str, aspect: str = ""):
         ]
     ):
         return {"sentiment": "Negative", "confidence": 85.0}
-    
+
     return {"sentiment": "Neutral", "confidence": 60.0}
 
 
 # --- Routes ---
 
+
 @app.get("/", response_class=HTMLResponse)
 async def serve_home(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+    # Python 3.14 & Latest Starlette compatibility syntax
+    return templates.TemplateResponse(request=request, name="index.html")
 
 
 @app.post("/predict")
@@ -138,7 +139,7 @@ async def predict_file(file: UploadFile = File(...)):
                 status_code=400, content={"error": "Uploaded file is empty"}
             )
 
-        # Detect Review Column
+        # Detect Review Column Dynamic Syntax
         review_col = None
         for col in df.columns:
             if re.search(
@@ -182,3 +183,9 @@ async def predict_file(file: UploadFile = File(...)):
         return JSONResponse(
             status_code=500, content={"error": f"File Processing Error: {str(e)}"}
         )
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=True)
