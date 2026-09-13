@@ -3,146 +3,413 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sentiment Intelligence Engine</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <title>AI Aspect Sentiment Dashboard</title>
+    <!-- Chart.js CDN for Analytics Dashboard -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
+        :root {
+            --bg-color: #f4f7f6;
+            --card-bg: #ffffff;
+            --text-color: #333333;
+            --primary: #4F46E5;
+            --primary-hover: #4338CA;
+            --voice-btn: #10B981;
+        }
+
+        .dark-mode {
+            --bg-color: #1e1e2e;
+            --card-bg: #2b2b3d;
+            --text-color: #f1f1f1;
+            --primary: #6366f1;
+            --primary-hover: #4f46e5;
+        }
+
         body {
-            background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%);
-            color: #f1f5f9;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 30px;
+            transition: all 0.3s ease;
         }
-        .soft-card {
-            background: rgba(30, 41, 59, 0.85);
-            backdrop-filter: blur(16px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
+
+        .header-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            max-width: 900px;
+            margin: 0 auto 20px auto;
         }
+
+        .toggle-btn {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 20px;
+            cursor: pointer;
+        }
+
+        .container {
+            max-width: 900px;
+            background: var(--card-bg);
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            margin: 0 auto;
+        }
+
+        .tab-buttons {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .tab-btn {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            background: #e2e8f0;
+            cursor: pointer;
+            font-weight: bold;
+            border-radius: 6px;
+        }
+
+        .tab-btn.active {
+            background: var(--primary);
+            color: white;
+        }
+
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        label { font-weight: bold; display: block; margin-top: 15px; }
+        input, select, textarea {
+            width: 100%;
+            padding: 10px;
+            margin-top: 5px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            box-sizing: border-box;
+            background: var(--card-bg);
+            color: var(--text-color);
+        }
+
+        .textarea-wrapper {
+            position: relative;
+        }
+
+        .voice-input-btn {
+            position: absolute;
+            right: 10px;
+            bottom: 12px;
+            background: var(--voice-btn);
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .voice-input-btn.listening {
+            background: #EF4444;
+            animation: pulse 1.2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+
+        .btn-submit {
+            width: 100%;
+            background: var(--primary);
+            color: white;
+            padding: 12px;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            margin-top: 20px;
+            cursor: pointer;
+        }
+
+        .result-box {
+            margin-top: 25px;
+            padding: 20px;
+            border-radius: 8px;
+            background: rgba(0,0,0,0.03);
+            display: none;
+        }
+
+        .result-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .speak-btn {
+            background: #2563EB;
+            color: white;
+            border: none;
+            padding: 6px 14px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+        }
+
+        .bar-container { background: #e0e0e0; border-radius: 10px; margin-top: 5px; overflow: hidden; }
+        .bar { height: 18px; text-align: right; padding-right: 5px; color: white; font-size: 12px; line-height: 18px; }
+        .bg-pos { background-color: #10B981; }
+        .bg-neu { background-color: #F59E0B; }
+        .bg-neg { background-color: #EF4444; }
+
+        .chart-box { max-width: 350px; margin: 20px auto; }
+        .styled-table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 14px; }
+        .styled-table th, .styled-table td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        .styled-table th { background-color: var(--primary); color: white; }
     </style>
 </head>
-<body class="min-h-screen flex items-center justify-center p-4 md:p-6">
+<body>
 
-    <div class="max-w-2xl w-full soft-card rounded-3xl p-6 md:p-8 shadow-2xl">
-        <!-- Header -->
-        <div class="text-center mb-6">
-            <h1 class="text-3xl md:text-4xl font-extrabold text-sky-400 tracking-tight">
-                Sentiment Analyzer
-            </h1>
-            <p class="text-slate-400 text-xs md:text-sm mt-1">আপনার রিভিউ বা কমেন্টের অনুভূতি বিশ্লেষণ করুন</p>
+<div class="header-bar">
+    <h2>📱 ABSA Sentiment Intelligence</h2>
+    <button class="toggle-btn" onclick="toggleDarkMode()">🌗 Dark/Light Mode</button>
+</div>
+
+<div class="container">
+    <!-- Tabs Header -->
+    <div class="tab-buttons">
+        <button class="tab-btn active" onclick="switchTab('single')">Single Review Analysis</button>
+        <button class="tab-btn" onclick="switchTab('bulk')">Bulk Dataset Upload (CSV/XLSX)</button>
+    </div>
+
+    <!-- TAB 1: SINGLE PREDICTION -->
+    <div id="single" class="tab-content active">
+        <label>App Name</label>
+        <input type="text" id="appName" placeholder="e.g. Duolingo">
+
+        <label>Aspect Category</label>
+        <select id="aspect">
+            <option>UI / Ease of Use</option>
+            <option>Ads / Premium / Subscription</option>
+            <option>Learning Content & Quality</option>
+            <option>Speaking & Pronunciation</option>
+            <option>Performance & Stability</option>
+            <option>Grammar & Vocabulary</option>
+        </select>
+
+        <label>User Review</label>
+        <div class="textarea-wrapper">
+            <textarea id="review" rows="3" placeholder="Type or click microphone to speak..."></textarea>
+            <button id="micBtn" class="voice-input-btn" onclick="startVoiceInput()">🎤 Speak</button>
         </div>
 
-        <!-- Input Section -->
-        <div class="space-y-4">
-            <div>
-                <textarea id="inputText" rows="4" class="w-full bg-slate-900 border border-slate-700 rounded-2xl p-4 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent transition text-sm md:text-base resize-none" placeholder="এখানে আপনার মন্তব্য বা রিভিউ লিখুন..."></textarea>
-            </div>
-
-            <button onclick="analyzeSentiment()" id="submitBtn" class="w-full bg-sky-500 hover:bg-sky-600 text-white font-bold py-3.5 rounded-2xl transition duration-200 flex justify-center items-center gap-2 shadow-lg shadow-sky-500/20 text-sm md:text-base">
-                <i class="fa-solid fa-wand-magic-sparkles text-sm"></i> 
-                <span>Analyze Sentiment</span>
-            </button>
+        <div style="margin-top: 10px;">
+            <input type="checkbox" id="autoSpeak" style="width: auto;">
+            <label for="autoSpeak" style="display: inline; font-weight: normal; font-size: 14px;">🔊 Auto Voice Reply Result</label>
         </div>
 
-        <!-- Result Card -->
-        <div id="resultCard" class="hidden mt-6 p-6 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl transition-all duration-300">
-            <div class="flex justify-between items-center mb-4">
-                <span id="sentimentBadge" class="px-4 py-1.5 rounded-xl text-xs md:text-sm font-bold flex items-center gap-2"></span>
-                <span id="confidenceVal" class="text-slate-200 font-extrabold text-base md:text-lg">0.0%</span>
-            </div>
+        <button class="btn-submit" onclick="analyzeSingle()">Analyze Sentiment</button>
 
-            <!-- Main Progress Bar -->
-            <div class="w-full bg-slate-800 rounded-full h-3 overflow-hidden mb-6">
-                <div id="progressBar" class="h-full rounded-full transition-all duration-700 ease-out" style="width: 0%"></div>
+        <div id="singleResult" class="result-box">
+            <div class="result-header">
+                <h3>Result: <span id="mainSentiment"></span></h3>
+                <button class="speak-btn" onclick="speakResult()">🔊 Listen Result</button>
             </div>
+            <p>Confidence: <strong id="mainConfidence"></strong>%</p>
+            <hr>
+            <div>Positive: <span id="posVal"></span>%</div>
+            <div class="bar-container"><div id="posBar" class="bar bg-pos" style="width:0%"></div></div>
 
-            <!-- Sentiment Distribution Graph Bar -->
-            <div class="pt-4 border-t border-slate-800">
-                <p class="text-xs font-bold text-sky-400 uppercase tracking-wider mb-2"><i class="fa-solid fa-chart-simple me-1"></i> Sentiment Distribution Graph</p>
-                <div class="flex h-4 rounded-xl overflow-hidden bg-slate-800 p-0.5 border border-slate-700">
-                    <div id="posBar" class="bg-emerald-500 h-full transition-all duration-500" style="width: 33%" title="Positive"></div>
-                    <div id="neuBar" class="bg-amber-400 h-full transition-all duration-500" style="width: 33%" title="Neutral"></div>
-                    <div id="negBar" class="bg-rose-500 h-full transition-all duration-500" style="width: 34%" title="Negative"></div>
-                </div>
-                <div class="flex justify-between text-[11px] font-semibold text-slate-400 mt-2">
-                    <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span> Positive</span>
-                    <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-amber-400 inline-block"></span> Neutral</span>
-                    <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-rose-500 inline-block"></span> Negative</span>
-                </div>
-            </div>
+            <div style="margin-top:10px;">Neutral: <span id="neuVal"></span>%</div>
+            <div class="bar-container"><div id="neuBar" class="bar bg-neu" style="width:0%"></div></div>
+
+            <div style="margin-top:10px;">Negative: <span id="negVal"></span>%</div>
+            <div class="bar-container"><div id="negBar" class="bar bg-neg" style="width:0%"></div></div>
         </div>
     </div>
 
-    <script>
-        async function analyzeSentiment() {
-            const input = document.getElementById('inputText').value;
-            const btn = document.getElementById('submitBtn');
-            const resultCard = document.getElementById('resultCard');
-            const badge = document.getElementById('sentimentBadge');
-            const confVal = document.getElementById('confidenceVal');
-            const bar = document.getElementById('progressBar');
+    <!-- TAB 2: BULK FILE UPLOAD & ANALYTICS DASHBOARD -->
+    <div id="bulk" class="tab-content">
+        <label>Upload Dataset File (.csv, .xlsx)</label>
+        <input type="file" id="fileInput" accept=".csv, .xlsx">
+        <p style="font-size: 12px; color: #777;">* Upload any CSV or Excel file containing review data.</p>
 
-            const posBar = document.getElementById('posBar');
-            const neuBar = document.getElementById('neuBar');
-            const negBar = document.getElementById('negBar');
+        <button class="btn-submit" onclick="uploadFile()">Process & Generate Analytics</button>
 
-            if (!input.trim()) {
-                alert("অনুগ্রহ করে একটি কমেন্ট লিখুন।");
-                return;
-            }
+        <div id="bulkResult" class="result-box">
+            <h3>📊 Bulk Processing Overview</h3>
+            <p>Total Reviews Evaluated: <strong id="totalRows"></strong></p>
+            
+            <div class="chart-box">
+                <canvas id="sentimentChart"></canvas>
+            </div>
 
-            btn.disabled = true;
-            btn.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i> Analyzing...`;
+            <h4>Preview (Top 10 Records):</h4>
+            <div id="tableContainer" style="overflow-x:auto;"></div>
+        </div>
+    </div>
+</div>
 
-            try {
-                const res = await fetch('/api/predict', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ text: input })
-                });
+<script>
+let chartInstance = null;
+let currentResultText = "";
 
-                const data = await res.json();
+// --- Voice Recognition (Speech to Text) ---
+function startVoiceInput() {
+    const micBtn = document.getElementById('micBtn');
+    const reviewBox = document.getElementById('review');
 
-                resultCard.classList.remove('hidden');
-                confVal.innerText = `Confidence: ${data.confidence}`;
-                bar.style.width = data.confidence;
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
-                const sentiment = data.sentiment.toLowerCase();
-                const score = parseFloat(data.confidence);
+    if (!SpeechRecognition) {
+        alert("Sorry, your browser does not support Speech Recognition. Please use Google Chrome or Edge.");
+        return;
+    }
 
-                if (sentiment === 'positive') {
-                    badge.className = "px-4 py-1.5 rounded-xl text-xs md:text-sm font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30";
-                    badge.innerHTML = `<i class="fa-solid fa-face-smile"></i> Positive`;
-                    bar.className = "h-full bg-emerald-500 transition-all duration-700";
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'en-US';
+    recognition.interimResults = false;
 
-                    posBar.style.width = `${score}%`;
-                    neuBar.style.width = `${(100 - score) / 2}%`;
-                    negBar.style.width = `${(100 - score) / 2}%`;
+    recognition.onstart = function() {
+        micBtn.classList.add('listening');
+        micBtn.innerHTML = "🔴 Listening...";
+    };
 
-                } else if (sentiment === 'negative') {
-                    badge.className = "px-4 py-1.5 rounded-xl text-xs md:text-sm font-bold bg-rose-500/20 text-rose-400 border border-rose-500/30";
-                    badge.innerHTML = `<i class="fa-solid fa-face-frown"></i> Negative`;
-                    bar.className = "h-full bg-rose-500 transition-all duration-700";
+    recognition.onresult = function(event) {
+        const transcript = event.results[0][0].transcript;
+        reviewBox.value = transcript;
+    };
 
-                    negBar.style.width = `${score}%`;
-                    posBar.style.width = `${(100 - score) / 2}%`;
-                    neuBar.style.width = `${(100 - score) / 2}%`;
+    recognition.onerror = function(event) {
+        alert("Voice Input Error: " + event.error);
+    };
 
-                } else {
-                    badge.className = "px-4 py-1.5 rounded-xl text-xs md:text-sm font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30";
-                    badge.innerHTML = `<i class="fa-solid fa-face-meh"></i> Neutral`;
-                    bar.className = "h-full bg-amber-400 transition-all duration-700";
+    recognition.onend = function() {
+        micBtn.classList.remove('listening');
+        micBtn.innerHTML = "🎤 Speak";
+    };
 
-                    neuBar.style.width = `${score}%`;
-                    posBar.style.width = `${(100 - score) / 2}%`;
-                    negBar.style.width = `${(100 - score) / 2}%`;
-                }
+    recognition.start();
+}
 
-            } catch (err) {
-                alert("সার্ভারে কানেক্ট হতে সমস্যা হচ্ছে!");
-            } finally {
-                btn.disabled = false;
-                btn.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles text-sm"></i> <span>Analyze Sentiment</span>`;
+// --- Text to Speech (Voice Reply) ---
+function speakText(text) {
+    if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.rate = 1.0;
+        utterance.pitch = 1.0;
+        utterance.lang = 'en-US';
+        window.speechSynthesis.speak(utterance);
+    } else {
+        alert("Sorry, your browser does not support Voice Reply.");
+    }
+}
+
+function speakResult() {
+    if (currentResultText) {
+        speakText(currentResultText);
+    }
+}
+
+// Tab Switching
+function switchTab(tabId) {
+    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+
+    if (tabId === 'single') {
+        document.querySelectorAll('.tab-btn')[0].classList.add('active');
+    } else {
+        document.querySelectorAll('.tab-btn')[1].classList.add('active');
+    }
+    document.getElementById(tabId).classList.add('active');
+}
+
+// Dark Mode Toggler
+function toggleDarkMode() {
+    document.body.classList.toggle('dark-mode');
+}
+
+// Single Review Prediction
+async function analyzeSingle() {
+    const formData = new FormData();
+    formData.append('app_name', document.getElementById('appName').value);
+    formData.append('aspect', document.getElementById('aspect').value);
+    formData.append('review', document.getElementById('review').value);
+
+    const res = await fetch('/predict', { method: 'POST', body: formData });
+    const data = await res.json();
+
+    document.getElementById('singleResult').style.display = 'block';
+    document.getElementById('mainSentiment').innerText = data.sentiment;
+    document.getElementById('mainConfidence').innerText = data.confidence;
+
+    document.getElementById('posVal').innerText = data.breakdown.Positive;
+    document.getElementById('posBar').style.width = data.breakdown.Positive + '%';
+
+    document.getElementById('neuVal').innerText = data.breakdown.Neutral;
+    document.getElementById('neuBar').style.width = data.breakdown.Neutral + '%';
+
+    document.getElementById('negVal').innerText = data.breakdown.Negative;
+    document.getElementById('negBar').style.width = data.breakdown.Negative + '%';
+
+    currentResultText = `The predicted sentiment is ${data.sentiment} with a confidence of ${data.confidence} percent.`;
+
+    if (document.getElementById('autoSpeak').checked) {
+        speakResult();
+    }
+}
+
+// Bulk File Upload & Chart Generation
+async function uploadFile() {
+    const fileInput = document.getElementById('fileInput');
+    if (fileInput.files.length === 0) {
+        alert("Please select a file first!");
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', fileInput.files[0]);
+
+    const res = await fetch('/predict-file', { method: 'POST', body: formData });
+    const data = await res.json();
+
+    if (data.error) {
+        alert(data.error);
+        return;
+    }
+
+    document.getElementById('bulkResult').style.display = 'block';
+    document.getElementById('totalRows').innerText = data.total_rows;
+    document.getElementById('tableContainer').innerHTML = data.table_html;
+
+    // Render Pie Chart
+    const ctx = document.getElementById('sentimentChart').getContext('2d');
+    if (chartInstance) chartInstance.destroy();
+
+    chartInstance = new Chart(ctx, {
+        type: 'pie',
+        data: {
+            labels: ['Positive', 'Neutral', 'Negative'],
+            datasets: [{
+                data: [data.summary.Positive, data.summary.Neutral, data.summary.Negative],
+                backgroundColor: ['#10B981', '#F59E0B', '#EF4444']
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: { position: 'bottom' }
             }
         }
-    </script>
+    });
+}
+</script>
 </body>
 </html>
