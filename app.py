@@ -41,12 +41,34 @@ if os.path.exists(MODEL_PATH) and os.path.exists(VECTORIZER_PATH):
     except Exception as e:
         print(f"⚠️ Warning loading pkl files: {e}")
 
+# Aspect extraction dictionary based on app feedback domain
+ASPECT_KEYWORDS = {
+    "Ads / Premium / Subscription": ["ads", "ad", "pay", "money", "subscription", "price", "premium", "cost", "paid", "buy", "charge"],
+    "Speaking & Pronunciation": ["speech", "voice", "pronounce", "pronunciation", "accent", "mic", "speaking", "audio", "listen", "sound"],
+    "Learning Effectiveness": ["learn", "easy", "helpful", "effective", "understand", "practice", "grammar", "vocabulary", "lesson", "teach"],
+    "UI / App Performance": ["crash", "bug", "slow", "interface", "ui", "design", "freeze", "error", "load", "lag", "update"],
+    "Language & Course Variety": ["language", "course", "content", "words", "spanish", "french", "german", "level", "variety"]
+}
+
+def extract_aspect(text: str) -> str:
+    """Extracts aspect automatically from text if none is provided."""
+    text_lower = text.lower()
+    for aspect_name, keywords in ASPECT_KEYWORDS.items():
+        if any(kw in text_lower for kw in keywords):
+            return aspect_name
+    return "General / Overall"
+
 
 def predict_sentiment_logic(text: str, aspect: str = ""):
     """Predicts sentiment using ML model if loaded, else fallback rule-based logic."""
     text_clean = str(text).strip()
+    
+    # Auto-extract aspect if empty or not provided
+    extracted_aspect = aspect.strip() if aspect and aspect.strip() else extract_aspect(text_clean)
+
     if not text_clean:
         return {
+            "aspect": "General / Overall",
             "sentiment": "Neutral",
             "confidence": 50.0,
             "breakdown": {"Positive": 0.0, "Neutral": 100.0, "Negative": 0.0},
@@ -55,7 +77,7 @@ def predict_sentiment_logic(text: str, aspect: str = ""):
     # Model Prediction Logic
     if model is not None and vectorizer is not None:
         try:
-            full_text = f"{aspect} {text_clean}".strip()
+            full_text = f"{extracted_aspect} {text_clean}".strip()
             vec_text = vectorizer.transform([full_text])
 
             if hasattr(model, "predict_proba"):
@@ -86,6 +108,7 @@ def predict_sentiment_logic(text: str, aspect: str = ""):
                 )
 
             return {
+                "aspect": extracted_aspect,
                 "sentiment": sentiment,
                 "confidence": confidence,
                 "breakdown": {
@@ -104,6 +127,7 @@ def predict_sentiment_logic(text: str, aspect: str = ""):
         for w in ["good", "great", "excellent", "love", "awesome", "best", "fast"]
     ):
         return {
+            "aspect": extracted_aspect,
             "sentiment": "Positive",
             "confidence": 85.0,
             "breakdown": {"Positive": 85.0, "Neutral": 10.0, "Negative": 5.0},
@@ -122,12 +146,14 @@ def predict_sentiment_logic(text: str, aspect: str = ""):
         ]
     ):
         return {
+            "aspect": extracted_aspect,
             "sentiment": "Negative",
             "confidence": 85.0,
             "breakdown": {"Positive": 5.0, "Neutral": 10.0, "Negative": 85.0},
         }
 
     return {
+        "aspect": extracted_aspect,
         "sentiment": "Neutral",
         "confidence": 60.0,
         "breakdown": {"Positive": 20.0, "Neutral": 60.0, "Negative": 20.0},
@@ -139,7 +165,6 @@ def predict_sentiment_logic(text: str, aspect: str = ""):
 
 @app.get("/", response_class=HTMLResponse)
 async def serve_home(request: Request):
-    # Fixed for Python 3.14 & Latest Starlette compatibility
     return templates.TemplateResponse(request=request, name="index.html")
 
 
@@ -200,10 +225,14 @@ async def predict_file(file: UploadFile = File(...)):
             review_col = string_cols[0] if len(string_cols) > 0 else df.columns[0]
 
         predictions = []
+        extracted_aspects = []
+        
         for val in df[review_col]:
             res = predict_sentiment_logic(str(val))
             predictions.append(res["sentiment"])
+            extracted_aspects.append(res["aspect"])
 
+        df["Extracted_Aspect"] = extracted_aspects
         df["Predicted_Sentiment"] = predictions
 
         pos_count = int((df["Predicted_Sentiment"] == "Positive").sum())
