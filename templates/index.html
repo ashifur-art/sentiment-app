@@ -74,8 +74,9 @@
                 <input type="text" name="app_name" placeholder="e.g. Duolingo">
             </div>
             <div class="form-group">
-                <label>Aspect Category</label>
+                <label>Aspect Category (Optional)</label>
                 <select name="aspect">
+                    <option value="">✨ Auto-Detect Aspect (System Logic)</option>
                     <option value="UI / Ease of Use">UI / Ease of Use</option>
                     <option value="Ads / Premium / Subscription">Ads / Premium / Subscription</option>
                     <option value="Learning Content & Quality">Learning Content & Quality</option>
@@ -101,6 +102,7 @@
         <div id="singleResult" style="margin-top: 20px; display: none;">
             <hr style="border-color: var(--border-color);">
             <h4>Result: <span id="resultSentiment" style="color: var(--accent-color);">-</span></h4>
+            <p>Detected Aspect: <strong id="resultAspect" style="color: var(--accent-color);">-</strong></p>
             <p>Confidence: <strong id="resultConfidence">-%</strong></p>
             <button type="button" id="listenResultBtn" class="btn btn-secondary">🔊 Listen Result</button>
 
@@ -218,6 +220,7 @@
 
             document.getElementById('singleResult').style.display = 'block';
             document.getElementById('resultSentiment').innerText = data.sentiment;
+            document.getElementById('resultAspect').innerText = data.aspect || "General / Overall";
             document.getElementById('resultConfidence').innerText = data.confidence + '%';
 
             if(data.breakdown) {
@@ -227,7 +230,7 @@
             }
 
             if (document.getElementById('autoVoiceToggle').checked) {
-                const speechMsg = `The predicted sentiment is ${data.sentiment} with a confidence of ${data.confidence} percent.`;
+                const speechMsg = `The predicted sentiment for aspect ${data.aspect || 'general'} is ${data.sentiment} with a confidence of ${data.confidence} percent.`;
                 speakText(speechMsg);
             }
         })
@@ -237,9 +240,10 @@
     // Listen Result Button Click
     document.getElementById('listenResultBtn').addEventListener('click', function() {
         const sentiment = document.getElementById('resultSentiment').innerText;
+        const aspect = document.getElementById('resultAspect').innerText;
         const confidence = document.getElementById('resultConfidence').innerText;
         if(sentiment && sentiment !== '-') {
-            speakText(`The result is ${sentiment} with ${confidence} confidence.`);
+            speakText(`The aspect is ${aspect}. The result is ${sentiment} with ${confidence} confidence.`);
         }
     });
 
